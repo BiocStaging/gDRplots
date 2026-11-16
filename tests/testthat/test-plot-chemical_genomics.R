@@ -80,3 +80,49 @@ test_that("plot_cgs_ranking works correctly", {
   plt <- plot_cgs_ranking(results, cl_name = "CellLineName_1", metric = "xc50") # Should still produce a plot
   expect_is(plt, "ggplot")
 })
+
+test_that("analyze_cgs handles cell lines screened at different co-treatment concentrations", {
+  cellline <- gDRutils::get_env_identifiers("cellline_name")
+  dt <- data.table::copy(metrics_data)
+  # the second cell line gets another anchor concentration than the first
+  dt[get(cellline) == "CellLineName_2" & cotrt_value == 1, cotrt_value := 2]
+
+  results <- analyze_cgs(dt, metrics = c("xc50", "x_mean"))
+  expect_setequal(names(results), c("CellLineName_1", "CellLineName_2"))
+  for (cl in names(results)) {
+    expect_true(all(is.finite(results[[cl]]$metrics_diff$x_mean)))
+    expect_s3_class(results[[cl]]$fgsea$x_mean, "data.table")
+  }
+  expect_gt(NROW(results$CellLineName_1$fgsea$x_mean), 0)
+  expect_equal(unique(results$CellLineName_2$metrics_diff$cotrt), "2_drug_1")
+  expect_equal(unique(results$CellLineName_1$metrics_diff$cotrt), "1_drug_1")
+})
+
+test_that("analyze_cgs analyses a cell line at each of its co-treatment concentrations", {
+  cellline <- gDRutils::get_env_identifiers("cellline_name")
+  dt <- data.table::copy(metrics_data)[get(cellline) == "CellLineName_1"]
+  second <- data.table::copy(dt[cotrt_value == 1])
+  second[, `:=`(cotrt_value = 2, x_mean = x_mean * 0.9)]
+  dt <- rbind(dt, second)
+
+  results <- analyze_cgs(dt, metrics = "x_mean")
+  expect_setequal(names(results), c("CellLineName_1 (co-treatment 1_drug_1)",
+                                    "CellLineName_1 (co-treatment 2_drug_1)"))
+  expect_false(isTRUE(all.equal(results[[1]]$metrics_diff$x_mean, results[[2]]$metrics_diff$x_mean)))
+})
+
+test_that(".cgs_fgsea leaves out drugs without a finite value", {
+  dt <- data.table::data.table(DrugName = paste0("d", 1:12),
+                               drug_moa = rep(c("A", "B", "C"), each = 4),
+                               x_mean = c(seq(-1, 1, length.out = 10), NA, Inf))
+  moa_list <- split(dt$DrugName, dt$drug_moa)
+  expect_message(res <- .cgs_fgsea(dt, "x_mean", moa_list, "DrugName", "drug_moa", "cl"),
+                 "2 drug\\(s\\) without a finite value")
+  expect_s3_class(res, "data.table")
+  expect_true("median" %in% names(res))
+
+  dt$x_mean <- NA_real_
+  expect_message(empty <- .cgs_fgsea(dt, "x_mean", moa_list, "DrugName", "drug_moa", "cl"),
+                 "GSEA skipped")
+  expect_equal(NROW(empty), 0)
+})
