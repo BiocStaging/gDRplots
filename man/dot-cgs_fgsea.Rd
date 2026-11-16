@@ -18,7 +18,8 @@
 \item{unit_name}{string, the cell line (or comparison) used in messages.}
 }
 \value{
-data.table with the \code{fgsea} result and a \code{median} column.
+data.table with the \code{fgsea} result and a \code{median} column; \code{leadingEdge}
+  holds the leading-edge drugs as a comma-separated string.
 }
 \description{
 Drugs without a finite value of the metric are left out, since \code{fgsea} accepts only

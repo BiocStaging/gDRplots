@@ -120,6 +120,7 @@ test_that(".cgs_fgsea leaves out drugs without a finite value", {
                  "2 drug\\(s\\) without a finite value")
   expect_s3_class(res, "data.table")
   expect_true("median" %in% names(res))
+  expect_type(res$leadingEdge, "character")
 
   dt$x_mean <- NA_real_
   expect_message(empty <- .cgs_fgsea(dt, "x_mean", moa_list, "DrugName", "drug_moa", "cl"),

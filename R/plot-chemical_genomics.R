@@ -188,7 +188,8 @@ analyze_cgs <- function(dt_metrics,
 #' @param name_col,moa_col strings, the drug name and MOA columns.
 #' @param unit_name string, the cell line (or comparison) used in messages.
 #'
-#' @return data.table with the \code{fgsea} result and a \code{median} column.
+#' @return data.table with the \code{fgsea} result and a \code{median} column; \code{leadingEdge}
+#'   holds the leading-edge drugs as a comma-separated string.
 #' @keywords internal
 .cgs_fgsea <- function(dt, metric, moa_list, name_col, moa_col, unit_name) {
   metric_values <- dt[[metric]]
@@ -204,7 +205,7 @@ analyze_cgs <- function(dt_metrics,
     message(sprintf("%s, %s: no drugs with a finite value, GSEA skipped", unit_name, metric))
     return(data.table::data.table(pathway = character(0), pval = numeric(0), padj = numeric(0),
                                   log2err = numeric(0), ES = numeric(0), NES = numeric(0),
-                                  size = integer(0), leadingEdge = list(), median = numeric(0)))
+                                  size = integer(0), leadingEdge = character(0), median = numeric(0)))
   }
 
   fgsea_result <- purrr::quietly(fgsea::fgsea)(pathways = moa_list,
@@ -217,6 +218,8 @@ analyze_cgs <- function(dt_metrics,
   median_values <- stats::setNames(medians$median, medians[[moa_col]])
 
   fgsea_result$median <- median_values[fgsea_result$pathway]
+  # a comma-separated string instead of a list column, so the table can be written to xlsx
+  fgsea_result$leadingEdge <- vapply(fgsea_result$leadingEdge, paste, character(1), collapse = ", ")
   data.table::setorder(fgsea_result, -NES)
   fgsea_result
 }
