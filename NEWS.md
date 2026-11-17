@@ -1,3 +1,8 @@
+## gDRplots 0.99.14 - 2026-11-16
+* fix `analyze_cgs()` for cell lines screened at different co-treatment concentrations
+* exclude drugs without a finite metric value from the GSEA in `analyze_cgs()`
+* convert `leadingEdge` of `analyze_cgs()` to a comma-separated string so the tables can be written to xlsx
+
 ## gDRplots 0.99.13 - 2026-11-05
 * allow any numeric column as `metric` in `heatmap_combo_metrics`, with `scale_type` required for a non-native column
 * restrict the 1.1 cap in `heatmap_combo_metrics` to the smooth scale

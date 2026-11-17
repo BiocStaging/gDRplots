@@ -35,6 +35,8 @@ Passed to \code{\link{prep_dt_response_metric_diff}}.}
 }
 \value{
 A list of results, where each element corresponds to a cell line or cell line difference.
+A cell line screened at several co-treatment concentrations gets one element per concentration,
+named \code{"<cell line> (co-treatment <concentration>_<dilution drug>)"}.
 Each result contains:
 \itemize{
   \item \code{fgsea}: GSEA results for the specified metrics,
@@ -45,6 +47,11 @@ Each result contains:
 \description{
 This function analyzes chemical genomics (CGS) data, filters by compound mechanism of action (MOA),
 prepares the data for Gene Set Enrichment Analysis (GSEA), and performs GSEA for specified cell lines and metrics.
+}
+\details{
+Each cell line is analysed at each co-treatment concentration it was screened at, so cell lines
+may use different concentrations. Drugs without a finite value of a metric are left out of the
+GSEA for that metric.
 }
 \examples{
 dt_metrics <- qs2::qs_read(system.file("testdata/cgs_data.qs2", package = "gDRplots"))
