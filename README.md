@@ -6,4 +6,4 @@ A package website is available under [this link](https://gdrplatform.github.io/g
 
 
 # AI use
-gDRplots has been developed by the gDR team since 2022. Since April 2026, parts of the code, tests and documentation have been written with the assistance of Claude Code (Anthropic) under the maintainers' direction. Plot design, package scope and methods are the team's; every change is reviewed by another team member and covered by the test suite. No third-party code is included; `calc_assoc()` reimplements `cdsrmodels::lin_associations` to avoid a GitHub-only dependency.
+gDRplots was started in 2022 and has been actively developed by the gDR team since May 2024. Nearly all of the package was written without AI tools. Since April 2026, some changes to code, tests and documentation have been made with the assistance of Claude Code (Anthropic); each was reviewed by a maintainer and is covered by the test suite. No third-party code is included; `calc_assoc()` reimplements `cdsrmodels::lin_associations` to avoid a GitHub-only dependency.
