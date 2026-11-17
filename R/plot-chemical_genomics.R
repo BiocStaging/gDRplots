@@ -131,7 +131,7 @@ analyze_cgs <- function(dt_metrics,
   unit_names[several] <- paste0(unit_names[several], " (co-treatment ", units$cotrt[several], ")")
 
   results <- lapply(seq_len(NROW(units)), function(i) {
-    data_subset <- metrics_diff[get(cellline) == units[[cellline]][i] & cotrt == units$cotrt[i]]
+    data_subset <- metrics_diff[get(cellline) == units[[cellline]][i] & get("cotrt") == units$cotrt[i]]
     data_subset$normalization_type <- normalization_type
     list_results <- lapply(metrics, function(metric) {
       .cgs_fgsea(data_subset, metric, moa_list, drug_name, drug_moa, unit_names[i])
