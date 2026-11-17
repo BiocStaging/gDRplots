@@ -1,7 +1,15 @@
-## gDRplots 0.99.14 - 2026-11-13
+## gDRplots 0.99.16 - 2026-11-17
 * reduce the vignette size by rendering figures at standard resolution
 * document the origin of the test data in `inst/scripts/README.md`
 * add an AI use statement to the README
+
+## gDRplots 0.99.15 - 2026-11-17
+* remove source of Rplots.pdf
+
+## gDRplots 0.99.14 - 2026-11-16
+* fix `analyze_cgs()` for cell lines screened at different co-treatment concentrations
+* exclude drugs without a finite metric value from the GSEA in `analyze_cgs()`
+* convert `leadingEdge` of `analyze_cgs()` to a comma-separated string so the tables can be written to xlsx
 
 ## gDRplots 0.99.13 - 2026-11-05
 * allow any numeric column as `metric` in `heatmap_combo_metrics`, with `scale_type` required for a non-native column
