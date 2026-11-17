@@ -17,7 +17,13 @@
 #' "GR" ("GRvalue") or "RV" ("RelativeViability").
 #' Passed to \code{\link{prep_dt_response_metric_diff}}.
 #'
+#' @details Each cell line is analysed at each co-treatment concentration it was screened at, so cell lines
+#' may use different concentrations. Drugs without a finite value of a metric are left out of the
+#' GSEA for that metric.
+#'
 #' @return A list of results, where each element corresponds to a cell line or cell line difference.
+#' A cell line screened at several co-treatment concentrations gets one element per concentration,
+#' named \code{"<cell line> (co-treatment <concentration>_<dilution drug>)"}.
 #' Each result contains:
 #' \itemize{
 #'   \item \code{fgsea}: GSEA results for the specified metrics,
@@ -85,15 +91,13 @@ analyze_cgs <- function(dt_metrics,
                                                normalization_type = normalization_type,
                                                additional_cols = drug_moa)
 
-  to_remove <- names(metrics_diff)[grepl("_fittings$", names(metrics_diff))]
-  to_remove <- to_remove[!grepl("cotrt_diff", to_remove)]
-  metrics_diff <- metrics_diff[, -c(to_remove), with = FALSE]
-
-  original <- grep("cotrt_diff|cellline_diff", names(metrics_diff), value = TRUE)
-  new <- gsub(".*gDR_(log10_)?(.*)_cotrt_diff.*", "\\2", original)
-  new <- gsub("_cellline_diff", "", new)
-
-  data.table::setnames(metrics_diff, original, new)
+  two_lines <- !is.null(cellline1) && !is.null(cellline2)
+  if (two_lines) {
+    original <- grep("_cellline_diff$", names(metrics_diff), value = TRUE)
+    data.table::setnames(metrics_diff, original, gsub("_cellline_diff$", "", original))
+  } else {
+    metrics_diff <- .cgs_diff_by_cotrt(metrics_diff)
+  }
 
   # create a list of DrugNames grouped by drug_moa, filtering out those with less than 4 unique drugs
   moa_list <- lapply(split(metrics_diff[[drug_name]], metrics_diff[[drug_moa]]), unique)
@@ -101,66 +105,123 @@ analyze_cgs <- function(dt_metrics,
 
   metrics_diff <- metrics_diff[eval(drug_moa) %chin% names(moa_list)]
 
-  # Determine FGSEA analysis path
-  if (!is.null(cellline1) && !is.null(cellline2)) {
+  if (two_lines) {
     # Perform FGSEA on the difference between the specified cell lines
+    unit_name <- paste0(cellline1, " vs. ", cellline2)
     list_results <- lapply(metrics, function(metric) {
-      metric_values <- metrics_diff[[metric]]
-      names(metric_values) <- metrics_diff[[drug_name]]
-      fgsea_result <- purrr::quietly(fgsea::fgsea)(pathways = moa_list,
-                                                   stats = metric_values,
-                                                   maxSize = 500,
-                                                   minSize = 4,
-                                                   nPermSimple = 1e5)$result
-
-      median_values <- metrics_diff[, stats::median(get(metric), na.rm = TRUE), by = drug_moa]$V1
-      names(median_values) <- metrics_diff[, unique(drug_moa)]
-
-      fgsea_result$median <- median_values[fgsea_result$pathway]
-      data.table::setorder(fgsea_result, -NES)
-      fgsea_result
+      .cgs_fgsea(metrics_diff, metric, moa_list, drug_name, drug_moa, unit_name)
     })
     names(list_results) <- metrics
-    results <- list(fgsea = list_results,
-                    metrics_diff = metrics_diff,
-                    moa_list = moa_list)
-    results <- list(results)
-    names(results) <- unique(paste0(metrics_diff$CellLineName_c1, " vs. ", metrics_diff$CellLineName_c2))
-  } else {
-    # Analyze all or a single specified cell line
-    cell_lines <- if (!is.null(cl_name)) {
-      cl_name
-    } else {
-      unique(metrics_diff[[cellline]])
-    }
-
-    results <- lapply(cell_lines, function(cl) {
-      data_subset <- metrics_diff[get(cellline) == cl]
-      data_subset$normalization_type <- normalization_type
-      list_results <- lapply(metrics, function(metric) {
-        metric_values <- data_subset[[metric]]
-        names(metric_values) <- data_subset[[drug_name]]
-        fgsea_result <- purrr::quietly(fgsea::fgsea)(pathways = moa_list,
-                                                     stats = metric_values,
-                                                     maxSize = 500,
-                                                     minSize = 4,
-                                                     nPermSimple = 1e5)$result
-
-        median_values <- data_subset[, stats::median(get(metric), na.rm = TRUE), by = drug_moa]$V1
-        names(median_values) <- data_subset[, unique(drug_moa)]
-
-        fgsea_result$median <- median_values[fgsea_result$pathway]
-        data.table::setorder(fgsea_result, -NES)
-        return(fgsea_result)
-      })
-      names(list_results) <- metrics
-      list(fgsea = list_results,
-           metrics_diff = data_subset,
-           moa_list = moa_list)
-    })
-    names(results) <- cell_lines
+    results <- list(list(fgsea = list_results,
+                         metrics_diff = metrics_diff,
+                         moa_list = moa_list))
+    names(results) <- unit_name
+    return(results)
   }
+
+  # Analyze all or a single specified cell line, at each co-treatment concentration it has
+  cell_lines <- if (!is.null(cl_name)) {
+    cl_name
+  } else {
+    unique(metrics_diff[[cellline]])
+  }
+  units <- unique(metrics_diff[get(cellline) %chin% cell_lines, c(cellline, "cotrt"), with = FALSE])
+  several <- duplicated(units[[cellline]]) | duplicated(units[[cellline]], fromLast = TRUE)
+  unit_names <- units[[cellline]]
+  unit_names[several] <- paste0(unit_names[several], " (co-treatment ", units$cotrt[several], ")")
+
+  results <- lapply(seq_len(NROW(units)), function(i) {
+    data_subset <- metrics_diff[get(cellline) == units[[cellline]][i] & get("cotrt") == units$cotrt[i]]
+    data_subset$normalization_type <- normalization_type
+    list_results <- lapply(metrics, function(metric) {
+      .cgs_fgsea(data_subset, metric, moa_list, drug_name, drug_moa, unit_names[i])
+    })
+    names(list_results) <- metrics
+    list(fgsea = list_results,
+         metrics_diff = data_subset,
+         moa_list = moa_list)
+  })
+  names(results) <- unit_names
   results
+}
+
+#' Reshape co-treatment differences to one row per drug and co-treatment concentration
+#'
+#' \code{prep_dt_response_metric_diff} returns one difference column per metric and
+#' co-treatment concentration (e.g. \code{RV_gDR_x_mean_cotrt_diff_0.03_drug_1}). A cell line
+#' screened at one concentration has \code{NA} in the columns of the others, so the columns are
+#' stacked into one column per metric, with the concentration in column \code{cotrt}. Rows
+#' without any value at a concentration are dropped.
+#'
+#' @param metrics_diff data.table returned by \code{prep_dt_response_metric_diff}.
+#'
+#' @return data.table with the identifier columns, \code{cotrt} and one column per metric.
+#' @keywords internal
+.cgs_diff_by_cotrt <- function(metrics_diff) {
+  pattern <- "^.*gDR_(log10_)?(.*)_cotrt_diff_(.*)$"
+  diff_cols <- grep("_cotrt_diff_", names(metrics_diff), value = TRUE)
+  diff_cols <- diff_cols[!grepl("_fittings$", diff_cols)]
+  metric_of <- sub(pattern, "\\2", diff_cols)
+  cotrt_of <- sub(pattern, "\\3", diff_cols)
+  meta_cols <- names(metrics_diff)[!grepl("cotrt|_fittings$", names(metrics_diff))]
+
+  stacked <- lapply(unique(cotrt_of), function(ct) {
+    cols <- diff_cols[cotrt_of == ct]
+    out <- metrics_diff[, c(meta_cols, cols), with = FALSE]
+    data.table::setnames(out, cols, metric_of[cotrt_of == ct])
+    has_value <- rowSums(!is.na(out[, metric_of[cotrt_of == ct], with = FALSE])) > 0
+    out <- out[has_value]
+    out$cotrt <- rep(ct, NROW(out))
+    out
+  })
+  data.table::rbindlist(stacked, use.names = TRUE, fill = TRUE)
+}
+
+#' Run GSEA on one metric of one cell line (or cell line comparison)
+#'
+#' Drugs without a finite value of the metric are left out, since \code{fgsea} accepts only
+#' finite statistics. When no drug is left, an empty result is returned.
+#'
+#' @param dt data.table with the metric column, drug names and MOAs.
+#' @param metric string, the metric column.
+#' @param moa_list named list of drug names per MOA.
+#' @param name_col,moa_col strings, the drug name and MOA columns.
+#' @param unit_name string, the cell line (or comparison) used in messages.
+#'
+#' @return data.table with the \code{fgsea} result and a \code{median} column; \code{leadingEdge}
+#'   holds the leading-edge drugs as a comma-separated string.
+#' @keywords internal
+.cgs_fgsea <- function(dt, metric, moa_list, name_col, moa_col, unit_name) {
+  metric_values <- dt[[metric]]
+  names(metric_values) <- dt[[name_col]]
+  finite <- is.finite(metric_values)
+  if (!all(finite)) {
+    message(sprintf("%s, %s: %d drug(s) without a finite value left out of GSEA",
+                    unit_name, metric, sum(!finite)))
+  }
+  metric_values <- metric_values[finite]
+
+  if (length(metric_values) == 0) {
+    message(sprintf("%s, %s: no drugs with a finite value, GSEA skipped", unit_name, metric))
+    return(data.table::data.table(pathway = character(0), pval = numeric(0), padj = numeric(0),
+                                  log2err = numeric(0), ES = numeric(0), NES = numeric(0),
+                                  size = integer(0), leadingEdge = character(0), median = numeric(0)))
+  }
+
+  fgsea_result <- purrr::quietly(fgsea::fgsea)(pathways = moa_list,
+                                               stats = metric_values,
+                                               maxSize = 500,
+                                               minSize = 4,
+                                               nPermSimple = 1e5)$result
+
+  medians <- dt[, list(median = stats::median(.SD[[1]], na.rm = TRUE)), by = moa_col, .SDcols = metric]
+  median_values <- stats::setNames(medians$median, medians[[moa_col]])
+
+  fgsea_result$median <- median_values[fgsea_result$pathway]
+  # a comma-separated string instead of a list column, so the table can be written to xlsx
+  fgsea_result$leadingEdge <- vapply(fgsea_result$leadingEdge, paste, character(1), collapse = ", ")
+  data.table::setorder(fgsea_result, -NES)
+  fgsea_result
 }
 
 
